@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+ <html> 
+    <head>
+        <meta charset="utf-8">
+        <title>Tester Page</title>
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+    </head>
+    <body>
+        <!--socket.io.js is automatically added by node-->
+        <script src="socket.io/socket.io.js"></script>
+        <!--jQuery Used For Some Frontend Tasks-->
+        <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+       <p id="stat"><strong>Status:</strong>Not Connected</p>
+       <h2>Tester Page NMS: Backend to Frontend</h2>
+       <h4>Receiving Last Inserted Data</h4>
+       <ul id="region"></ul>
+       <hr>
+       <ul id="sitelog_lastone"></ul>
+    
+        <script>
+            //Connecting To socket.io
+            var socket = io.connect(window.location.host);
+            socket.on("Start_Chat",function(){
+                //Setting Message On Connection..
+                $("#stat").html("<strong>Status:</strong>Connected");
+            })
+            socket.on("disconnect",function(){
+                //Setting Message On Disconnection
+                $("#stat").html("<strong>Status:</strong>Disconnected From Server Refresh!");
+            })
+            
+            //Socket for Sitelog (Lastone)
+            function refreshSitelog() {
+		s = 1;
+                socket.on("sitelog_lastone",function(data){
+                    // $("ul").append("<li>"+data+"</li>");
+                    $("#sitelog_lastone").prepend(
+			"<br>",
+                        "<li>" + "device ID: " + data[0].dev_id + "</li>",
+                        "<li>" + "data: "+ JSON.stringify(data[0].data) + "</li>",
+                        "<li>" + data[0].createdOn + "</li>", 
+                        "<br>",
+                        "<hr>"
+                        
+                    );
+                })
+		setTimeout(refreshSitelog, s*1000);
+            }
+            refreshSitelog();
+
+            function refreshData() {
+                x = 1;
+                socket.emit("sitelog_lastone_request");
+                setTimeout(refreshData, x*1000);
+            }
+            refreshData();
+            
+            //Socket for Region:
+            socket.emit("region_request");
+            socket.on("region_response",function(data){
+                $("#region").replaceWith(
+                    "<li>" + "Region Name: " + data[0].name + "</li>",
+                    // "<li>" + "data: "+ JSON.stringify(data[0].data) + "</li>",
+                    // "<li>" + data[0].createdOn + "</li>",
+                    // "<li>" + refreshDateTime() + "</li>"
+                );
+            })
+
+            
+        </script>      
+    </body>
+</html>
