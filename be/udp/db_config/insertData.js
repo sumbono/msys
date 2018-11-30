@@ -93,7 +93,7 @@ module.exports.insertData = function (data){
                                             let limit_max = result[0].limit_max;
 
                                             //GREEN
-                                            if (major_min <= sensorValueNow[key] && sensorValueNow[key] < major_max) {
+                                            if (major_min < sensorValueNow[key] && sensorValueNow[key] < major_max) {
                                               // Update Color Value: Start
                                               db.collection('nms_site_device_sensor').findOneAndUpdate(
                                                 {
@@ -120,7 +120,7 @@ module.exports.insertData = function (data){
                                               // Update Color Value: Finish.
 
                                             //YELLOW (MIN)
-                                            } else if (limit_min <= sensorValueNow[key] && sensorValueNow[key] < major_min) {
+                                            } else if (limit_min < sensorValueNow[key] && sensorValueNow[key] <= major_min) {
                                               // Update Color Value: Start
                                               db.collection('nms_site_device_sensor').findOneAndUpdate(
                                                 {
@@ -174,7 +174,7 @@ module.exports.insertData = function (data){
                                               // Update Color Value: Finish.
 
                                             //RED (MIN)
-                                            } else if (value_min <= sensorValueNow[key] && sensorValueNow[key] < limit_min) {
+                                            } else if (value_min <= sensorValueNow[key] && sensorValueNow[key] <= limit_min) {
                                               // Update Color Value: Start
                                               db.collection('nms_site_device_sensor').findOneAndUpdate(
                                                 {
