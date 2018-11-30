@@ -11,7 +11,7 @@ var cron        = require('node-cron');
 exports.alarmDev = function () {
 
 //     cron.schedule('* */1 * * * *', function(){
-      cron.schedule('*/1 * * * *', function(){
+      cron.schedule('*/3 * * * *', function(){
 
         MongoClient.connect(db_url, (err, db) => {
           //GET site_id for all devices..
@@ -25,6 +25,7 @@ exports.alarmDev = function () {
                 let elSite    = site[i];
                 let siteId    = elSite._id;
                 let siteName  = elSite.name;
+                
                 //GET all device's dev_id..
                 db.collection('nms_site_device').find({site_id: siteId}).toArray((err, device) => {
                   if (err) {
@@ -38,7 +39,14 @@ exports.alarmDev = function () {
                       let devName   = elDevice.title;
 
                       //GET all device's parameters..
-                      db.collection('nms_site_device_sensor').find({dev_id: devId}).toArray((err, param) => {
+                      db.collection('nms_site_device_sensor').find(
+                        {  
+                          $and: [
+                              {dev_id: devId}, 
+                              // {timestamp: {$exists: true}},
+                          ]
+                        }
+                        ).toArray((err, param) => {
                         if (err) {
                           console.log(`not connected to site device sensor collection.`);
                         } else {
@@ -62,21 +70,27 @@ exports.alarmDev = function () {
                             let limit_max = elParam.limit_max;
                             let value_max = elParam.value_max;
 
-                            // let timeNow  = new Date(Date.now()).toLocaleString();
-                            // let timestamp = new Date(Date.now()).getTime();
+                            let timeNow   = new Date(Date.now()).toLocaleString();
+                            let timeNowMs = new Date(Date.now()).getTime();
+
+                            //date tolerance for last inserted date: 3 day
+                            let toleranceMs = 3*24*60*60*1000;
+
+                            //last inserted date
+                            // let paramTs = elParam.timestamp;
+                            // let alarmDate = new Date(+paramTs).toLocaleString();
 
                             //miliseconds to Date Now:
                             // var alarmDate = new Date(+paramTs).toLocaleString();
                             
                             let alarmData = {
-                              // Date: alarmDate,
-                              // timestamp: paramTs,
-                              // nowDate: now,
                               Site: siteName,
                               Device: devName,
                               dev_id: devId,
                               Parameter: paramName,
-                              Value: paramValue
+                              Value: paramValue,
+                              // Date: alarmDate,
+                              // timestamp: paramTs
                             };
 
                             //if device is not a Door Sensor
@@ -85,558 +99,28 @@ exports.alarmDev = function () {
                               //if device is not a Camera
                               if ( paramName !== "Camera" ) {
 
-                                //if timestamp is undefined
+                                // //if timestamp is undefined
                                 if (elParam.timestamp !== undefined) {
+
+                                  //last inserted date
+                                  let paramTs = elParam.timestamp;
+                                  let alarmDate = new Date(+paramTs).toLocaleString();
+
+                                  alarmData.Date = alarmDate;
+                                  alarmData.timestamp = paramTs;
 
                                   //if alarm data was found on document
                                   if ( elParam.alarm !== undefined ) {
 
-                                    let paramTs = elParam.timestamp;
-                                    let alarmDate = new Date(+paramTs).toLocaleString();
-                                    
-                                    alarmData.Date = alarmDate;
-                                    alarmData.timestamp = paramTs;
-
                                     //if alarm data is not NORMAL
                                     if ( elParam.alarm !== "NORMAL" ) {
-                                      alarmData.Status = elParam.alarm;
-                                      db.collection('nms_alarm_device').findOneAndUpdate(
-                                        {
-                                          $and: [
-                                            {Site: siteName},
-                                            {Device: devName},
-                                            {dev_id: devId},
-                                            {Parameter: paramName},
-                                          ]
-                                        },
-                                        alarmData,
-                                        {
-                                          returnOriginal: false,
-                                          upsert: true
-                                        },
-                                        (err,result) => {
-                                          if(err){
-                                            console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                          }else {
-                                            console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-                                          }
-                                      }); 
-                                    } else {
-                                      //if alarm data is NORMAL
-                                      alarmData.Status = elParam.alarm;
-                                      db.collection('nms_device_normal').findOneAndUpdate(
-                                        {
-                                          $and: [
-                                            {Site: siteName},
-                                            {Device: devName},
-                                            {dev_id: devId},
-                                            {Parameter: paramName},
-                                          ]
-                                        },
-                                        alarmData,
-                                        {
-                                          returnOriginal: false,
-                                          upsert: true
-                                        },
-                                        (err,result) => {
-                                          if(err){
-                                            console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                          }else {
-                                            console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-                                          }
-                                      });
-                                    }
-                                  
-                                  //if alarm data was not found on document
-                                  } else {
 
-                                    let paramTs = elParam.timestamp;
-                                    let alarmDate = new Date(+paramTs).toLocaleString();
-                                    
-                                    alarmData.Date = alarmDate;
-                                    alarmData.timestamp = paramTs;
-
-                                    // if the device is not 'battery'
-                                    if ( paramView !== "battery" ) {
-
-                                      //if value is CRITICAL
-                                      if ( paramColor === "red" ) {
-                                        if (value_min <= paramValue && paramValue < limit_min) {
-                                          alarmData.Status = "CRITICAL_MIN";
-                                          db.collection('nms_alarm_device').findOneAndUpdate(
-                                            {
-                                              $and: [
-                                                {Site: siteName},
-                                                {Device: devName},
-                                                {dev_id: devId},
-                                                {Parameter: paramName},
-                                              ]
-                                            },
-                                            alarmData,
-                                            {
-                                              returnOriginal: false,
-                                              upsert: true
-                                            },
-                                            (err,result) => {
-                                              if(err){
-                                                console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                              }else {
-                                                console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-
-                                                db.collection('nms_site_device_sensor').findOneAndUpdate(
-                                                  {
-                                                    $and: [
-                                                      { dev_id: devId },
-                                                      { protocol_id: paramId },
-                                                      { sensor_name: paramName },
-                                                      { protocol: paramInit }
-                                                    ]
-                                                  },
-                                                  {
-                                                    $set: {
-                                                      // colour: "red",
-                                                      alarm: "CRITICAL_MIN"
-                                                    }
-                                                  },
-                                                  // {
-                                                  //   returnOriginal: false,
-                                                  //   upsert: false
-                                                  // },
-                                                  (err,result) => {
-                                                    if(err){
-                                                      console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                                    }else {
-                                                      console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-                                                    }
-                                                });
-
-                                              }
-                                          });
-                                        } else {
-                                          alarmData.Status = "CRITICAL_MAX";
-                                          db.collection('nms_alarm_device').findOneAndUpdate(
-                                            {
-                                              $and: [
-                                                {Site: siteName},
-                                                {Device: devName},
-                                                {dev_id: devId},
-                                                {Parameter: paramName},
-                                              ]
-                                            },
-                                            alarmData,
-                                            {
-                                              returnOriginal: false,
-                                              upsert: true
-                                            },
-                                            (err,result) => {
-                                              if(err){
-                                                console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                              }else {
-                                                console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-
-                                                db.collection('nms_site_device_sensor').findOneAndUpdate(
-                                                  {
-                                                    $and: [
-                                                      { dev_id: devId },
-                                                      { protocol_id: paramId },
-                                                      { sensor_name: paramName },
-                                                      { protocol: paramInit }
-                                                    ]
-                                                  },
-                                                  {
-                                                    $set: {
-                                                      // colour: "red",
-                                                      alarm: "CRITICAL_MAX"
-                                                    }
-                                                  },
-                                                  // {
-                                                  //   returnOriginal: false,
-                                                  //   upsert: false
-                                                  // },
-                                                  (err,result) => {
-                                                    if(err){
-                                                      console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                                    }else {
-                                                      console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-                                                    }
-                                                });
-
-                                              }
-                                          });
-                                        }
-                                      
-                                      //if value is MAJOR
-                                      } else if ( paramColor === "yellow" ) {
-                                        if (limit_min <= paramValue && paramValue <= major_min) {
-                                          alarmData.Status = "MAJOR_MIN";
-                                          db.collection('nms_alarm_device').findOneAndUpdate(
-                                            {
-                                              $and: [
-                                                {Site: siteName},
-                                                {Device: devName},
-                                                {dev_id: devId},
-                                                {Parameter: paramName},
-                                              ]
-                                            },
-                                            alarmData,
-                                            {
-                                              returnOriginal: false,
-                                              upsert: true
-                                            },
-                                            (err,result) => {
-                                              if(err){
-                                                console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                              }else {
-                                                console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-
-                                                db.collection('nms_site_device_sensor').findOneAndUpdate(
-                                                  {
-                                                    $and: [
-                                                      { dev_id: devId },
-                                                      { protocol_id: paramId },
-                                                      { sensor_name: paramName },
-                                                      { protocol: paramInit }
-                                                    ]
-                                                  },
-                                                  {
-                                                    $set: {
-                                                      // colour: "yellow",
-                                                      alarm: "MAJOR_MIN"
-                                                    }
-                                                  },
-                                                  // {
-                                                  //   returnOriginal: false,
-                                                  //   upsert: false
-                                                  // },
-                                                  (err,result) => {
-                                                    if(err){
-                                                      console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                                    }else {
-                                                      console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-                                                    }
-                                                });
-
-                                              }
-                                          });  
-                                        } else {
-                                          alarmData.Status = "MAJOR_MAX";
-                                          db.collection('nms_alarm_device').findOneAndUpdate(
-                                            {
-                                              $and: [
-                                                {Site: siteName},
-                                                {Device: devName},
-                                                {dev_id: devId},
-                                                {Parameter: paramName},
-                                              ]
-                                            },
-                                            alarmData,
-                                            {
-                                              returnOriginal: false,
-                                              upsert: true
-                                            },
-                                            (err,result) => {
-                                              if(err){
-                                                console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                              }else {
-                                                console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-
-                                                db.collection('nms_site_device_sensor').findOneAndUpdate(
-                                                  {
-                                                    $and: [
-                                                      { dev_id: devId },
-                                                      { protocol_id: paramId },
-                                                      { sensor_name: paramName },
-                                                      { protocol: paramInit }
-                                                    ]
-                                                  },
-                                                  {
-                                                    $set: {
-                                                      // colour: "yellow",
-                                                      alarm: "MAJOR_MAX"
-                                                    }
-                                                  },
-                                                  // {
-                                                  //   returnOriginal: false,
-                                                  //   upsert: false
-                                                  // },
-                                                  (err,result) => {
-                                                    if(err){
-                                                      console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                                    }else {
-                                                      console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-                                                    }
-                                                });
-
-                                              }
-                                          });
-                                        }
-
-                                      //if value is NORMAL
-                                      } else if (paramColor === "green") {
+                                      //if diff is more than tolerance
+                                      if ( (timeNowMs - paramTs) >= toleranceMs ) {
                                         
-                                        if ( major_min <= paramValue && paramValue <= major_max ) {
-                                          alarmData.Status = "NORMAL";
-                                          db.collection('nms_device_normal').findOneAndUpdate(
-                                            {
-                                              $and: [
-                                                {Site: siteName},
-                                                {Device: devName},
-                                                {dev_id: devId},
-                                                {Parameter: paramName},
-                                              ]
-                                            },
-                                            alarmData,
-                                            {
-                                              returnOriginal: false,
-                                              upsert: true
-                                            },
-                                            (err,result) => {
-                                              if(err){
-                                                console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                              }else {
-                                                console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
+                                        alarmData.Status = "CRITICAL_OFFLINE";
 
-                                                db.collection('nms_site_device_sensor').findOneAndUpdate(
-                                                  {
-                                                    $and: [
-                                                      { dev_id: devId },
-                                                      { protocol_id: paramId },
-                                                      { sensor_name: paramName },
-                                                      { protocol: paramInit }
-                                                    ]
-                                                  },
-                                                  {
-                                                    $set: {
-                                                      // colour: "green",
-                                                      alarm: "NORMAL"
-                                                    }
-                                                  },
-                                                  // {
-                                                  //   returnOriginal: false,
-                                                  //   upsert: false
-                                                  // },
-                                                  (err,result) => {
-                                                    if(err){
-                                                      console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                                    }else {
-                                                      console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-                                                    }
-                                                });
-
-                                              }
-                                          });
-                                        
-                                        } else if (value_min <= paramValue && paramValue < limit_min) {
-                                          alarmData.Status = "CRITICAL_MIN";
-                                          db.collection('nms_alarm_device').findOneAndUpdate(
-                                            {
-                                              $and: [
-                                                {Site: siteName},
-                                                {Device: devName},
-                                                {dev_id: devId},
-                                                {Parameter: paramName},
-                                              ]
-                                            },
-                                            alarmData,
-                                            {
-                                              returnOriginal: false,
-                                              upsert: true
-                                            },
-                                            (err,result) => {
-                                              if(err){
-                                                console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                              }else {
-                                                console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-
-                                                db.collection('nms_site_device_sensor').findOneAndUpdate(
-                                                  {
-                                                    $and: [
-                                                      { dev_id: devId },
-                                                      { protocol_id: paramId },
-                                                      { sensor_name: paramName },
-                                                      { protocol: paramInit }
-                                                    ]
-                                                  },
-                                                  {
-                                                    $set: {
-                                                      // colour: "red",
-                                                      alarm: "CRITICAL_MIN"
-                                                    }
-                                                  },
-                                                  // {
-                                                  //   returnOriginal: false,
-                                                  //   upsert: false
-                                                  // },
-                                                  (err,result) => {
-                                                    if(err){
-                                                      console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                                    }else {
-                                                      console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-                                                    }
-                                                });
-
-                                              }
-                                          });
-                                        } else if (limit_min <= paramValue && paramValue <= major_min) {
-                                          alarmData.Status = "MAJOR_MIN";
-                                          db.collection('nms_alarm_device').findOneAndUpdate(
-                                            {
-                                              $and: [
-                                                {Site: siteName},
-                                                {Device: devName},
-                                                {dev_id: devId},
-                                                {Parameter: paramName},
-                                              ]
-                                            },
-                                            alarmData,
-                                            {
-                                              returnOriginal: false,
-                                              upsert: true
-                                            },
-                                            (err,result) => {
-                                              if(err){
-                                                console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                              }else {
-                                                console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-
-                                                db.collection('nms_site_device_sensor').findOneAndUpdate(
-                                                  {
-                                                    $and: [
-                                                      { dev_id: devId },
-                                                      { protocol_id: paramId },
-                                                      { sensor_name: paramName },
-                                                      { protocol: paramInit }
-                                                    ]
-                                                  },
-                                                  {
-                                                    $set: {
-                                                      // colour: "red",
-                                                      alarm: "MAJOR_MIN"
-                                                    }
-                                                  },
-                                                  // {
-                                                  //   returnOriginal: false,
-                                                  //   upsert: false
-                                                  // },
-                                                  (err,result) => {
-                                                    if(err){
-                                                      console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                                    }else {
-                                                      console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-                                                    }
-                                                });
-
-                                              }
-                                          });
-                                        } else if (major_max <= paramValue && paramValue <= limit_max) {
-                                          alarmData.Status = "MAJOR_MAX";
-                                          db.collection('nms_alarm_device').findOneAndUpdate(
-                                            {
-                                              $and: [
-                                                {Site: siteName},
-                                                {Device: devName},
-                                                {dev_id: devId},
-                                                {Parameter: paramName},
-                                              ]
-                                            },
-                                            alarmData,
-                                            {
-                                              returnOriginal: false,
-                                              upsert: true
-                                            },
-                                            (err,result) => {
-                                              if(err){
-                                                console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                              }else {
-                                                console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-
-                                                db.collection('nms_site_device_sensor').findOneAndUpdate(
-                                                  {
-                                                    $and: [
-                                                      { dev_id: devId },
-                                                      { protocol_id: paramId },
-                                                      { sensor_name: paramName },
-                                                      { protocol: paramInit }
-                                                    ]
-                                                  },
-                                                  {
-                                                    $set: {
-                                                      // colour: "red",
-                                                      alarm: "MAJOR_MAX"
-                                                    }
-                                                  },
-                                                  // {
-                                                  //   returnOriginal: false,
-                                                  //   upsert: false
-                                                  // },
-                                                  (err,result) => {
-                                                    if(err){
-                                                      console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                                    }else {
-                                                      console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-                                                    }
-                                                });
-
-                                              }
-                                          });
-                                        } else if (limit_max <= paramValue && paramValue <= value_max) {
-                                          alarmData.Status = "CRITICAL_MAX";
-                                          db.collection('nms_alarm_device').findOneAndUpdate(
-                                            {
-                                              $and: [
-                                                {Site: siteName},
-                                                {Device: devName},
-                                                {dev_id: devId},
-                                                {Parameter: paramName},
-                                              ]
-                                            },
-                                            alarmData,
-                                            {
-                                              returnOriginal: false,
-                                              upsert: true
-                                            },
-                                            (err,result) => {
-                                              if(err){
-                                                console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                              }else {
-                                                console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-
-                                                db.collection('nms_site_device_sensor').findOneAndUpdate(
-                                                  {
-                                                    $and: [
-                                                      { dev_id: devId },
-                                                      { protocol_id: paramId },
-                                                      { sensor_name: paramName },
-                                                      { protocol: paramInit }
-                                                    ]
-                                                  },
-                                                  {
-                                                    $set: {
-                                                      // colour: "red",
-                                                      alarm: "CRITICAL_MAX"
-                                                    }
-                                                  },
-                                                  // {
-                                                  //   returnOriginal: false,
-                                                  //   upsert: false
-                                                  // },
-                                                  (err,result) => {
-                                                    if(err){
-                                                      console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                                    }else {
-                                                      console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-                                                    }
-                                                });
-
-                                              }
-                                          });
-                                        } else {
-                                          console.log(`this parameter is UNDEFINED.`);
-                                        }
-      
-                                      } else {
-                                        alarmData.Status = "UNDEFINED";
-                                        db.collection('nms_device_undefined').findOneAndUpdate(
+                                        db.collection('nms_alarm_device').findOneAndUpdate(
                                           {
                                             $and: [
                                               {Site: siteName},
@@ -657,13 +141,131 @@ exports.alarmDev = function () {
                                               console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
                                             }
                                         });
-                                      }  
+                                      
+                                      //if diff is less than tolerance
+                                      } else {
 
-                                    //if progress view is 'battery"
+                                        alarmData.Status = elParam.alarm;
+                                        db.collection('nms_alarm_device').findOneAndUpdate(
+                                          {
+                                            $and: [
+                                              {Site: siteName},
+                                              {Device: devName},
+                                              {dev_id: devId},
+                                              {Parameter: paramName},
+                                            ]
+                                          },
+                                          alarmData,
+                                          {
+                                            returnOriginal: false,
+                                            upsert: true
+                                          },
+                                          (err,result) => {
+                                            if(err){
+                                              console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
+                                            }else {
+                                              console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
+                                            }
+                                        });
+
+                                      }
+                                    
+                                    //if alarm data is NORMAL
+                                    } else {
+
+                                      //if diff is more than tolerance
+                                      if ( (timeNowMs - paramTs) >= toleranceMs ) {
+                                        
+                                        alarmData.Status = "CRITICAL_OFFLINE";
+
+                                        db.collection('nms_alarm_device').findOneAndUpdate(
+                                          {
+                                            $and: [
+                                              {Site: siteName},
+                                              {Device: devName},
+                                              {dev_id: devId},
+                                              {Parameter: paramName},
+                                            ]
+                                          },
+                                          alarmData,
+                                          {
+                                            returnOriginal: false,
+                                            upsert: true
+                                          },
+                                          (err,result) => {
+                                            if(err){
+                                              console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
+                                            }else {
+                                              console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
+                                            }
+                                        });
+                                      
+                                      //if diff is less than tolerance
+                                      } else {
+
+                                        alarmData.Status = elParam.alarm;
+                                        db.collection('nms_device_normal').findOneAndUpdate(
+                                          {
+                                            $and: [
+                                              {Site: siteName},
+                                              {Device: devName},
+                                              {dev_id: devId},
+                                              {Parameter: paramName},
+                                            ]
+                                          },
+                                          alarmData,
+                                          {
+                                            returnOriginal: false,
+                                            upsert: true
+                                          },
+                                          (err,result) => {
+                                            if(err){
+                                              console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
+                                            }else {
+                                              console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
+                                            }
+                                        });
+                                      }
+
+                                    }
+                                  
+                                  //if alarm data was not found on document
+                                  } else {
+
+                                    //if diff is more than tolerance
+                                    if ( (timeNowMs - paramTs) >= toleranceMs ) {
+
+                                      alarmData.Status = "CRITICAL_OFFLINE";
+
+                                      db.collection('nms_alarm_device').findOneAndUpdate(
+                                        {
+                                          $and: [
+                                            {Site: siteName},
+                                            {Device: devName},
+                                            {dev_id: devId},
+                                            {Parameter: paramName},
+                                          ]
+                                        },
+                                        alarmData,
+                                        {
+                                          returnOriginal: false,
+                                          upsert: true
+                                        },
+                                        (err,result) => {
+                                          if(err){
+                                            console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
+                                          }else {
+                                            console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
+                                          }
+                                      });
+                                    
+                                    //if diff is less than tolerance
                                     } else {
 
                                       if (value_min <= paramValue && paramValue < limit_min) {
+
                                         alarmData.Status = "CRITICAL_MIN";
+
                                         db.collection('nms_alarm_device').findOneAndUpdate(
                                           {
                                             $and: [
@@ -686,7 +288,9 @@ exports.alarmDev = function () {
                                             }
                                         });
                                       } else if (limit_min <= paramValue && paramValue <= major_min) {
+
                                         alarmData.Status = "MAJOR_MIN";
+
                                         db.collection('nms_alarm_device').findOneAndUpdate(
                                           {
                                             $and: [
@@ -709,7 +313,9 @@ exports.alarmDev = function () {
                                             }
                                         });
                                       } else if (major_max <= paramValue && paramValue <= limit_max) {
+
                                         alarmData.Status = "MAJOR_MAX";
+
                                         db.collection('nms_alarm_device').findOneAndUpdate(
                                           {
                                             $and: [
@@ -732,7 +338,9 @@ exports.alarmDev = function () {
                                             }
                                         });
                                       } else if (limit_max <= paramValue && paramValue <= value_max) {
+
                                         alarmData.Status = "CRITICAL_MAX";
+
                                         db.collection('nms_alarm_device').findOneAndUpdate(
                                           {
                                             $and: [
@@ -755,7 +363,9 @@ exports.alarmDev = function () {
                                             }
                                         });
                                       } else {
+
                                         alarmData.Status = "NORMAL";
+
                                         db.collection('nms_device_normal').findOneAndUpdate(
                                           {
                                             $and: [
@@ -783,752 +393,101 @@ exports.alarmDev = function () {
                                   }
                               
                                 } else {
+                                  // console.log(`this device ${devName} with devID ${devId} on site ${siteName} is CRITICAL_OFFLINE..!!`);
 
-                                  //if alarm data was found on document
-                                  if ( elParam.alarm !== undefined ) {
+                                  if ( paramName === "KWh" ) {
 
-                                    // let paramTs = elParam.timestamp;
-                                    // let alarmDate = new Date(+paramTs).toLocaleString();
-                                    
-                                    // alarmData.Date = alarmDate;
-                                    // alarmData.timestamp = paramTs;
-
-                                    let timeNow   = new Date(Date.now()).toLocaleString();
-                                    let timeNowMs = new Date(Date.now()).getTime();
-
-                                    alarmData.Date = timeNow;
+                                    alarmData.Date = timeNow ;
                                     alarmData.timestamp = timeNowMs;
+                                    alarmData.Status = "NORMAL";
 
-                                    //if alarm data is not NORMAL
-                                    if ( elParam.alarm !== "NORMAL" ) {
-                                      alarmData.Status = elParam.alarm;
-                                      db.collection('nms_alarm_device').findOneAndUpdate(
-                                        {
-                                          $and: [
-                                            {Site: siteName},
-                                            {Device: devName},
-                                            {dev_id: devId},
-                                            {Parameter: paramName},
-                                          ]
-                                        },
-                                        alarmData,
-                                        {
-                                          returnOriginal: false,
-                                          upsert: true
-                                        },
-                                        (err,result) => {
-                                          if(err){
-                                            console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                          }else {
-                                            console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-                                          }
-                                      }); 
-                                    } else {
-                                      //if alarm data is NORMAL
-                                      alarmData.Status = elParam.alarm;
-                                      db.collection('nms_device_normal').findOneAndUpdate(
-                                        {
-                                          $and: [
-                                            {Site: siteName},
-                                            {Device: devName},
-                                            {dev_id: devId},
-                                            {Parameter: paramName},
-                                          ]
-                                        },
-                                        alarmData,
-                                        {
-                                          returnOriginal: false,
-                                          upsert: true
-                                        },
-                                        (err,result) => {
-                                          if(err){
-                                            console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                          }else {
-                                            console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-                                          }
-                                      });
-                                    }
-                                  
-                                  //if alarm data was not found on document
+                                    db.collection('nms_device_normal').findOneAndUpdate(
+                                      {
+                                        $and: [
+                                          {Site: siteName},
+                                          {Device: devName},
+                                          {dev_id: devId},
+                                          {Parameter: paramName},
+                                        ]
+                                      },
+                                      alarmData,
+                                      {
+                                        returnOriginal: false,
+                                        upsert: true
+                                      },
+                                      (err,result) => {
+                                        if(err){
+                                          console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
+                                        }else {
+                                          console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
+                                        }
+                                    });
+
+                                  } else if (paramValue === "NA") {
+
+                                    alarmData.Date = "not_available" ;
+                                    alarmData.timestamp = timeNowMs;
+                                    alarmData.Status = "NOT_AVAILABLE";
+
+                                    db.collection('nms_alarm_device').findOneAndUpdate(
+                                      {
+                                        $and: [
+                                          {Site: siteName},
+                                          {Device: devName},
+                                          {dev_id: devId},
+                                          {Parameter: paramName},
+                                        ]
+                                      },
+                                      alarmData,
+                                      {
+                                        returnOriginal: false,
+                                        upsert: true
+                                      },
+                                      (err,result) => {
+                                        if(err){
+                                          console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
+                                        }else {
+                                          console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
+                                        }
+                                    });
                                   } else {
 
-                                    let timeNow   = new Date(Date.now()).toLocaleString();
-                                    let timeNowMs = new Date(Date.now()).getTime();
-
-                                    alarmData.Date = timeNow;
+                                    alarmData.Date = "unknown" ;
                                     alarmData.timestamp = timeNowMs;
+                                    alarmData.Status = "CRITICAL_OFFLINE";
 
-                                    // if the device is not 'battery'
-                                    if ( paramView !== "battery" ) {
-
-                                      //if value is CRITICAL
-                                      if ( paramColor === "red" ) {
-                                        if (value_min <= paramValue && paramValue < limit_min) {
-                                          alarmData.Status = "CRITICAL_MIN";
-                                          db.collection('nms_alarm_device').findOneAndUpdate(
-                                            {
-                                              $and: [
-                                                {Site: siteName},
-                                                {Device: devName},
-                                                {dev_id: devId},
-                                                {Parameter: paramName},
-                                              ]
-                                            },
-                                            alarmData,
-                                            {
-                                              returnOriginal: false,
-                                              upsert: true
-                                            },
-                                            (err,result) => {
-                                              if(err){
-                                                console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                              }else {
-                                                console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-
-                                                db.collection('nms_site_device_sensor').findOneAndUpdate(
-                                                  {
-                                                    $and: [
-                                                      { dev_id: devId },
-                                                      { protocol_id: paramId },
-                                                      { sensor_name: paramName },
-                                                      { protocol: paramInit }
-                                                    ]
-                                                  },
-                                                  {
-                                                    $set: {
-                                                      // colour: "red",
-                                                      alarm: "CRITICAL_MIN"
-                                                    }
-                                                  },
-                                                  // {
-                                                  //   returnOriginal: false,
-                                                  //   upsert: false
-                                                  // },
-                                                  (err,result) => {
-                                                    if(err){
-                                                      console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                                    }else {
-                                                      console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-                                                    }
-                                                });
-
-                                              }
-                                          });
-                                        } else {
-                                          alarmData.Status = "CRITICAL_MAX";
-                                          db.collection('nms_alarm_device').findOneAndUpdate(
-                                            {
-                                              $and: [
-                                                {Site: siteName},
-                                                {Device: devName},
-                                                {dev_id: devId},
-                                                {Parameter: paramName},
-                                              ]
-                                            },
-                                            alarmData,
-                                            {
-                                              returnOriginal: false,
-                                              upsert: true
-                                            },
-                                            (err,result) => {
-                                              if(err){
-                                                console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                              }else {
-                                                console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-
-                                                db.collection('nms_site_device_sensor').findOneAndUpdate(
-                                                  {
-                                                    $and: [
-                                                      { dev_id: devId },
-                                                      { protocol_id: paramId },
-                                                      { sensor_name: paramName },
-                                                      { protocol: paramInit }
-                                                    ]
-                                                  },
-                                                  {
-                                                    $set: {
-                                                      // colour: "red",
-                                                      alarm: "CRITICAL_MAX"
-                                                    }
-                                                  },
-                                                  // {
-                                                  //   returnOriginal: false,
-                                                  //   upsert: false
-                                                  // },
-                                                  (err,result) => {
-                                                    if(err){
-                                                      console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                                    }else {
-                                                      console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-                                                    }
-                                                });
-
-                                              }
-                                          });
+                                    db.collection('nms_alarm_device').findOneAndUpdate(
+                                      {
+                                        $and: [
+                                          {Site: siteName},
+                                          {Device: devName},
+                                          {dev_id: devId},
+                                          {Parameter: paramName},
+                                        ]
+                                      },
+                                      alarmData,
+                                      {
+                                        returnOriginal: false,
+                                        upsert: true
+                                      },
+                                      (err,result) => {
+                                        if(err){
+                                          console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
+                                        }else {
+                                          console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
                                         }
-                                      
-                                      //if value is MAJOR
-                                      } else if ( paramColor === "yellow" ) {
-                                        if (limit_min <= paramValue && paramValue <= major_min) {
-                                          alarmData.Status = "MAJOR_MIN";
-                                          db.collection('nms_alarm_device').findOneAndUpdate(
-                                            {
-                                              $and: [
-                                                {Site: siteName},
-                                                {Device: devName},
-                                                {dev_id: devId},
-                                                {Parameter: paramName},
-                                              ]
-                                            },
-                                            alarmData,
-                                            {
-                                              returnOriginal: false,
-                                              upsert: true
-                                            },
-                                            (err,result) => {
-                                              if(err){
-                                                console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                              }else {
-                                                console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-
-                                                db.collection('nms_site_device_sensor').findOneAndUpdate(
-                                                  {
-                                                    $and: [
-                                                      { dev_id: devId },
-                                                      { protocol_id: paramId },
-                                                      { sensor_name: paramName },
-                                                      { protocol: paramInit }
-                                                    ]
-                                                  },
-                                                  {
-                                                    $set: {
-                                                      // colour: "yellow",
-                                                      alarm: "MAJOR_MIN"
-                                                    }
-                                                  },
-                                                  // {
-                                                  //   returnOriginal: false,
-                                                  //   upsert: false
-                                                  // },
-                                                  (err,result) => {
-                                                    if(err){
-                                                      console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                                    }else {
-                                                      console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-                                                    }
-                                                });
-
-                                              }
-                                          });  
-                                        } else {
-                                          alarmData.Status = "MAJOR_MAX";
-                                          db.collection('nms_alarm_device').findOneAndUpdate(
-                                            {
-                                              $and: [
-                                                {Site: siteName},
-                                                {Device: devName},
-                                                {dev_id: devId},
-                                                {Parameter: paramName},
-                                              ]
-                                            },
-                                            alarmData,
-                                            {
-                                              returnOriginal: false,
-                                              upsert: true
-                                            },
-                                            (err,result) => {
-                                              if(err){
-                                                console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                              }else {
-                                                console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-
-                                                db.collection('nms_site_device_sensor').findOneAndUpdate(
-                                                  {
-                                                    $and: [
-                                                      { dev_id: devId },
-                                                      { protocol_id: paramId },
-                                                      { sensor_name: paramName },
-                                                      { protocol: paramInit }
-                                                    ]
-                                                  },
-                                                  {
-                                                    $set: {
-                                                      // colour: "yellow",
-                                                      alarm: "MAJOR_MAX"
-                                                    }
-                                                  },
-                                                  // {
-                                                  //   returnOriginal: false,
-                                                  //   upsert: false
-                                                  // },
-                                                  (err,result) => {
-                                                    if(err){
-                                                      console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                                    }else {
-                                                      console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-                                                    }
-                                                });
-
-                                              }
-                                          });
-                                        }
-
-                                      //if value is NORMAL
-                                      } else if (paramColor === "green") {
-                                        
-                                        if ( major_min <= paramValue && paramValue <= major_max ) {
-                                          alarmData.Status = "NORMAL";
-                                          db.collection('nms_device_normal').findOneAndUpdate(
-                                            {
-                                              $and: [
-                                                {Site: siteName},
-                                                {Device: devName},
-                                                {dev_id: devId},
-                                                {Parameter: paramName},
-                                              ]
-                                            },
-                                            alarmData,
-                                            {
-                                              returnOriginal: false,
-                                              upsert: true
-                                            },
-                                            (err,result) => {
-                                              if(err){
-                                                console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                              }else {
-                                                console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-
-                                                db.collection('nms_site_device_sensor').findOneAndUpdate(
-                                                  {
-                                                    $and: [
-                                                      { dev_id: devId },
-                                                      { protocol_id: paramId },
-                                                      { sensor_name: paramName },
-                                                      { protocol: paramInit }
-                                                    ]
-                                                  },
-                                                  {
-                                                    $set: {
-                                                      // colour: "green",
-                                                      alarm: "NORMAL"
-                                                    }
-                                                  },
-                                                  // {
-                                                  //   returnOriginal: false,
-                                                  //   upsert: false
-                                                  // },
-                                                  (err,result) => {
-                                                    if(err){
-                                                      console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                                    }else {
-                                                      console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-                                                    }
-                                                });
-
-                                              }
-                                          });
-                                        
-                                        } else if (value_min <= paramValue && paramValue < limit_min) {
-                                          alarmData.Status = "CRITICAL_MIN";
-                                          db.collection('nms_alarm_device').findOneAndUpdate(
-                                            {
-                                              $and: [
-                                                {Site: siteName},
-                                                {Device: devName},
-                                                {dev_id: devId},
-                                                {Parameter: paramName},
-                                              ]
-                                            },
-                                            alarmData,
-                                            {
-                                              returnOriginal: false,
-                                              upsert: true
-                                            },
-                                            (err,result) => {
-                                              if(err){
-                                                console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                              }else {
-                                                console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-
-                                                db.collection('nms_site_device_sensor').findOneAndUpdate(
-                                                  {
-                                                    $and: [
-                                                      { dev_id: devId },
-                                                      { protocol_id: paramId },
-                                                      { sensor_name: paramName },
-                                                      { protocol: paramInit }
-                                                    ]
-                                                  },
-                                                  {
-                                                    $set: {
-                                                      // colour: "red",
-                                                      alarm: "CRITICAL_MIN"
-                                                    }
-                                                  },
-                                                  // {
-                                                  //   returnOriginal: false,
-                                                  //   upsert: false
-                                                  // },
-                                                  (err,result) => {
-                                                    if(err){
-                                                      console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                                    }else {
-                                                      console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-                                                    }
-                                                });
-
-                                              }
-                                          });
-                                        } else if (limit_min <= paramValue && paramValue <= major_min) {
-                                          alarmData.Status = "MAJOR_MIN";
-                                          db.collection('nms_alarm_device').findOneAndUpdate(
-                                            {
-                                              $and: [
-                                                {Site: siteName},
-                                                {Device: devName},
-                                                {dev_id: devId},
-                                                {Parameter: paramName},
-                                              ]
-                                            },
-                                            alarmData,
-                                            {
-                                              returnOriginal: false,
-                                              upsert: true
-                                            },
-                                            (err,result) => {
-                                              if(err){
-                                                console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                              }else {
-                                                console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-
-                                                db.collection('nms_site_device_sensor').findOneAndUpdate(
-                                                  {
-                                                    $and: [
-                                                      { dev_id: devId },
-                                                      { protocol_id: paramId },
-                                                      { sensor_name: paramName },
-                                                      { protocol: paramInit }
-                                                    ]
-                                                  },
-                                                  {
-                                                    $set: {
-                                                      // colour: "red",
-                                                      alarm: "MAJOR_MIN"
-                                                    }
-                                                  },
-                                                  // {
-                                                  //   returnOriginal: false,
-                                                  //   upsert: false
-                                                  // },
-                                                  (err,result) => {
-                                                    if(err){
-                                                      console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                                    }else {
-                                                      console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-                                                    }
-                                                });
-
-                                              }
-                                          });
-                                        } else if (major_max <= paramValue && paramValue <= limit_max) {
-                                          alarmData.Status = "MAJOR_MAX";
-                                          db.collection('nms_alarm_device').findOneAndUpdate(
-                                            {
-                                              $and: [
-                                                {Site: siteName},
-                                                {Device: devName},
-                                                {dev_id: devId},
-                                                {Parameter: paramName},
-                                              ]
-                                            },
-                                            alarmData,
-                                            {
-                                              returnOriginal: false,
-                                              upsert: true
-                                            },
-                                            (err,result) => {
-                                              if(err){
-                                                console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                              }else {
-                                                console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-
-                                                db.collection('nms_site_device_sensor').findOneAndUpdate(
-                                                  {
-                                                    $and: [
-                                                      { dev_id: devId },
-                                                      { protocol_id: paramId },
-                                                      { sensor_name: paramName },
-                                                      { protocol: paramInit }
-                                                    ]
-                                                  },
-                                                  {
-                                                    $set: {
-                                                      // colour: "red",
-                                                      alarm: "MAJOR_MAX"
-                                                    }
-                                                  },
-                                                  // {
-                                                  //   returnOriginal: false,
-                                                  //   upsert: false
-                                                  // },
-                                                  (err,result) => {
-                                                    if(err){
-                                                      console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                                    }else {
-                                                      console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-                                                    }
-                                                });
-
-                                              }
-                                          });
-                                        } else if (limit_max <= paramValue && paramValue <= value_max) {
-                                          alarmData.Status = "CRITICAL_MAX";
-                                          db.collection('nms_alarm_device').findOneAndUpdate(
-                                            {
-                                              $and: [
-                                                {Site: siteName},
-                                                {Device: devName},
-                                                {dev_id: devId},
-                                                {Parameter: paramName},
-                                              ]
-                                            },
-                                            alarmData,
-                                            {
-                                              returnOriginal: false,
-                                              upsert: true
-                                            },
-                                            (err,result) => {
-                                              if(err){
-                                                console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                              }else {
-                                                console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-
-                                                db.collection('nms_site_device_sensor').findOneAndUpdate(
-                                                  {
-                                                    $and: [
-                                                      { dev_id: devId },
-                                                      { protocol_id: paramId },
-                                                      { sensor_name: paramName },
-                                                      { protocol: paramInit }
-                                                    ]
-                                                  },
-                                                  {
-                                                    $set: {
-                                                      // colour: "red",
-                                                      alarm: "CRITICAL_MAX"
-                                                    }
-                                                  },
-                                                  // {
-                                                  //   returnOriginal: false,
-                                                  //   upsert: false
-                                                  // },
-                                                  (err,result) => {
-                                                    if(err){
-                                                      console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                                    }else {
-                                                      console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-                                                    }
-                                                });
-
-                                              }
-                                          });
-                                        } else {
-                                          console.log(`this parameter is UNDEFINED.`);
-                                        }
-      
-                                      } else {
-                                        alarmData.Status = "UNDEFINED";
-                                        db.collection('nms_device_undefined').findOneAndUpdate(
-                                          {
-                                            $and: [
-                                              {Site: siteName},
-                                              {Device: devName},
-                                              {dev_id: devId},
-                                              {Parameter: paramName},
-                                            ]
-                                          },
-                                          alarmData,
-                                          {
-                                            returnOriginal: false,
-                                            upsert: true
-                                          },
-                                          (err,result) => {
-                                            if(err){
-                                              console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                            }else {
-                                              console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-                                            }
-                                        });
-                                      }  
-
-                                    //if progress view is 'battery"
-                                    } else {
-
-                                      if (value_min <= paramValue && paramValue < limit_min) {
-                                        alarmData.Status = "CRITICAL_MIN";
-                                        db.collection('nms_alarm_device').findOneAndUpdate(
-                                          {
-                                            $and: [
-                                              {Site: siteName},
-                                              {Device: devName},
-                                              {dev_id: devId},
-                                              {Parameter: paramName},
-                                            ]
-                                          },
-                                          alarmData,
-                                          {
-                                            returnOriginal: false,
-                                            upsert: true
-                                          },
-                                          (err,result) => {
-                                            if(err){
-                                              console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                            }else {
-                                              console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-                                            }
-                                        });
-                                      } else if (limit_min <= paramValue && paramValue <= major_min) {
-                                        alarmData.Status = "MAJOR_MIN";
-                                        db.collection('nms_alarm_device').findOneAndUpdate(
-                                          {
-                                            $and: [
-                                              {Site: siteName},
-                                              {Device: devName},
-                                              {dev_id: devId},
-                                              {Parameter: paramName},
-                                            ]
-                                          },
-                                          alarmData,
-                                          {
-                                            returnOriginal: false,
-                                            upsert: true
-                                          },
-                                          (err,result) => {
-                                            if(err){
-                                              console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                            }else {
-                                              console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-                                            }
-                                        });
-                                      } else if (major_max <= paramValue && paramValue <= limit_max) {
-                                        alarmData.Status = "MAJOR_MAX";
-                                        db.collection('nms_alarm_device').findOneAndUpdate(
-                                          {
-                                            $and: [
-                                              {Site: siteName},
-                                              {Device: devName},
-                                              {dev_id: devId},
-                                              {Parameter: paramName},
-                                            ]
-                                          },
-                                          alarmData,
-                                          {
-                                            returnOriginal: false,
-                                            upsert: true
-                                          },
-                                          (err,result) => {
-                                            if(err){
-                                              console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                            }else {
-                                              console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-                                            }
-                                        });
-                                      } else if (limit_max <= paramValue && paramValue <= value_max) {
-                                        alarmData.Status = "CRITICAL_MAX";
-                                        db.collection('nms_alarm_device').findOneAndUpdate(
-                                          {
-                                            $and: [
-                                              {Site: siteName},
-                                              {Device: devName},
-                                              {dev_id: devId},
-                                              {Parameter: paramName},
-                                            ]
-                                          },
-                                          alarmData,
-                                          {
-                                            returnOriginal: false,
-                                            upsert: true
-                                          },
-                                          (err,result) => {
-                                            if(err){
-                                              console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                            }else {
-                                              console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-                                            }
-                                        });
-                                      } else {
-                                        alarmData.Status = "NORMAL";
-                                        db.collection('nms_device_normal').findOneAndUpdate(
-                                          {
-                                            $and: [
-                                              {Site: siteName},
-                                              {Device: devName},
-                                              {dev_id: devId},
-                                              {Parameter: paramName},
-                                            ]
-                                          },
-                                          alarmData,
-                                          {
-                                            returnOriginal: false,
-                                            upsert: true
-                                          },
-                                          (err,result) => {
-                                            if(err){
-                                              console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                            }else {
-                                              console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-                                            }
-                                        });
-                                      }
-
-                                    }
+                                    });
                                   }
-
-
-                                  // console.log(`this param ${paramName} is not available on web.`);
-                                  // let timeNow   = new Date(Date.now()).toLocaleString();
-                                  // let timeNowMs = new Date(Date.now()).getTime();
-
-                                  // alarmData.Date = timeNow;
-                                  // alarmData.timestamp = timeNowMs;
-                                  // alarmData.Status = "UNDEFINED-ON-WEB";
-
-                                  // db.collection('nms_device_undefined').findOneAndUpdate(
-                                  //   {
-                                  //     $and: [
-                                  //       {Site: siteName},
-                                  //       {Device: devName},
-                                  //       {dev_id: devId},
-                                  //       {Parameter: paramName},
-                                  //     ]
-                                  //   },
-                                  //   alarmData,
-                                  //   {
-                                  //     returnOriginal: false,
-                                  //     upsert: true
-                                  //   },
-                                  //   (err,result) => {
-                                  //     if(err){
-                                  //       console.log(`this parameter of ${devName} in Site ${siteName} is not inserted.`);
-                                  //     }else {
-                                  //       console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
-                                  //     }
-                                  // });
 
                                 }
 
                               //if the device is Camera
                               } else {
-                                // console.log(`this is a Camera.`);
-
-                                let timeNow   = new Date(Date.now()).toLocaleString();
-                                let timeNowMs = new Date(Date.now()).getTime();
-
                                 alarmData.Date = timeNow;
                                 alarmData.timestamp = timeNowMs;
-                                alarmData.Status = "UNDEFINED-CAMERA";
+                                alarmData.Status = "NORMAL";
 
-                                db.collection('nms_device_undefined').findOneAndUpdate(
+                                db.collection('nms_device_normal').findOneAndUpdate(
                                   {
                                     $and: [
                                       {Site: siteName},
@@ -1553,16 +512,11 @@ exports.alarmDev = function () {
                             
                             //if the device is Door sensor
                             } else {
-                              // console.log(`this is a Door sensor.`);
-
-                              let timeNow   = new Date(Date.now()).toLocaleString();
-                              let timeNowMs = new Date(Date.now()).getTime();
-
                               alarmData.Date = timeNow;
                               alarmData.timestamp = timeNowMs;
-                              alarmData.Status = "UNDEFINED-DOOR";
+                              alarmData.Status = "NORMAL";
 
-                              db.collection('nms_device_undefined').findOneAndUpdate(
+                              db.collection('nms_device_normal').findOneAndUpdate(
                                 {
                                   $and: [
                                     {Site: siteName},
@@ -1582,7 +536,7 @@ exports.alarmDev = function () {
                                   }else {
                                     console.log(`this parameter of ${devName} in Site ${siteName} is ${alarmData.Status}.`);
                                   }
-                              });
+                              }); 
                             }
                             
                           }

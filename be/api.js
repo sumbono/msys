@@ -32,6 +32,7 @@ var sensorValue     = require('./api/report_collection/sensorValueNow');
 
 //Dashboard Graph
 var graphDash       = require('./api/dashboard_collections/graphData.controller');
+var graphDashRx     = require('./api/dashboard_collections/graphDataRx.controller');
 
 //List Camera
 var listCamera      = require('./api/report_collection/listCamera');
@@ -43,6 +44,11 @@ var parseBatt       = require('./api/report_collection/parsingBatt');
 //AVG Battery
 var avgBatt         = require('./api/report_collection/avgBatt');
 
+//Site Status
+var siteStatus      = require('./api/dashboard_collections/siteStatus.controller');
+
+//Site Status Device
+var siteStatusDevice = require('./api/dashboard_collections/siteStatusDevice.controller');
 
 // ==============================================================================//
 
@@ -79,6 +85,7 @@ sensorValue.getSensorValue();
 
 //Set Graph Dashboard Values
 graphDash.getGraphData();
+graphDashRx.getGraphDataRx();
 
 //Get List Camera Images
 listCamera.getListCamera();
@@ -89,6 +96,12 @@ parseBatt.getParseBatt();
 
 //AVG Battery
 avgBatt.getAvgBatt();
+
+//Site Status
+siteStatus.getsiteStatus();
+
+//Site Status Device
+siteStatusDevice.getsiteStatusDevice();
 
 // Routing To Public Folder For Any Static Context
 // app.use(express.static(__dirname + '/public'));
