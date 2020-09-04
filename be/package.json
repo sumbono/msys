@@ -24,7 +24,7 @@
     "joi": "^13.4.0",
     "joi-objectid": "^2.0.0",
     "jsonwebtoken": "^8.3.0",
-    "mongodb": "^2.2.33",
+    "mongodb": "^3.6.1",
     "mongoose": "^5.2.5",
     "node-cron": "^1.2.1",
     "path": "^0.12.7",
